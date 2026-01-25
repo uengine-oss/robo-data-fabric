@@ -1,0 +1,119 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #E8E8E8;
+  background-color: #0A0E27;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #151929;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2D3250;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3D4260;
+}
+
+/* Data table styles */
+.data-table {
+  @apply w-full text-sm text-left;
+}
+
+.data-table thead {
+  @apply sticky top-0 bg-minds-secondary;
+}
+
+.data-table th {
+  @apply px-4 py-3 font-medium text-minds-accent border-b border-minds-border;
+}
+
+.data-table td {
+  @apply px-4 py-2 border-b border-minds-border text-minds-text;
+}
+
+.data-table tr:hover td {
+  @apply bg-minds-surface;
+}
+
+/* Animation classes */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.slide-enter-active,
+.slide-leave-active {
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.slide-enter-from,
+.slide-leave-to {
+  transform: translateY(-10px);
+  opacity: 0;
+}
+
+/* Button styles */
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 bg-minds-accent text-minds-primary font-medium rounded-lg 
+           hover:bg-minds-accent-hover transition-colors duration-200
+           focus:outline-none focus:ring-2 focus:ring-minds-accent focus:ring-offset-2 focus:ring-offset-minds-primary;
+  }
+  
+  .btn-secondary {
+    @apply px-4 py-2 bg-minds-secondary text-minds-text font-medium rounded-lg 
+           border border-minds-border hover:bg-minds-surface transition-colors duration-200
+           focus:outline-none focus:ring-2 focus:ring-minds-accent focus:ring-offset-2 focus:ring-offset-minds-primary;
+  }
+  
+  .btn-danger {
+    @apply px-4 py-2 bg-red-600 text-white font-medium rounded-lg 
+           hover:bg-red-700 transition-colors duration-200
+           focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-minds-primary;
+  }
+  
+  .input-field {
+    @apply w-full px-4 py-2 bg-minds-surface text-minds-text border border-minds-border rounded-lg
+           focus:outline-none focus:ring-2 focus:ring-minds-accent focus:border-transparent
+           placeholder:text-minds-muted;
+  }
+  
+  .card {
+    @apply bg-minds-secondary border border-minds-border rounded-xl p-6;
+  }
+}

@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 샘플 데이터베이스
+  postgres-sample:
+    image: postgres:15
+    container_name: data-fabric-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      POSTGRES_DB: sampledb
+    ports:
+      - "5433:5432"  # 기존 5432와 충돌 방지
+    volumes:
+      - postgres-sample-data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - data-fabric-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # MindsDB
+  mindsdb:
+    image: mindsdb/mindsdb:lightwood
+    container_name: data-fabric-mindsdb
+    ports:
+      - "47334:47334"  # HTTP API
+      - "47335:47335"  # MySQL Protocol
+    environment:
+      MINDSDB_DOCKER_ENV: "True"
+    volumes:
+      - mindsdb-data:/root/mindsdb_storage
+    networks:
+      - data-fabric-network
+    depends_on:
+      postgres-sample:
+        condition: service_healthy
+
+networks:
+  data-fabric-network:
+    driver: bridge
+
+volumes:
+  postgres-sample-data:
+  mindsdb-data:
