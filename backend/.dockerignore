@@ -1,0 +1,35 @@
+# Environment files (should not be in Docker image)
+.env
+.env.*
+*.env
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv
+.venv
+ENV
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose*.yml
+
+# Logs
+*.log

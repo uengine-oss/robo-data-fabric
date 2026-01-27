@@ -10,13 +10,33 @@ class MindsDBService:
     """Service for interacting with MindsDB HTTP SQL API"""
     
     def __init__(self, base_url: str = None):
-        self.base_url = base_url or os.getenv("MINDSDB_URL", "http://127.0.0.1:47334")
-        self.api_endpoint = f"{self.base_url}/api/sql/query"
+        self._fixed_base_url = base_url
         self.timeout = 120.0
+    
+    @property
+    def base_url(self) -> str:
+        """Get base URL, reading from environment at call time"""
+        if self._fixed_base_url:
+            return self._fixed_base_url
+        elif os.getenv("MINDSDB_URL"):
+            return os.getenv("MINDSDB_URL")
+        else:
+            host = os.getenv("MINDSDB_HOST", "127.0.0.1")
+            port = os.getenv("MINDSDB_API_PORT", "47334")
+            return f"http://{host}:{port}"
+    
+    @property
+    def api_endpoint(self) -> str:
+        """Get API endpoint"""
+        return f"{self.base_url}/api/sql/query"
     
     async def execute_query(self, query: str) -> Dict[str, Any]:
         """Execute SQL query via MindsDB HTTP API"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         start_time = time.time()
+        logger.info(f"MindsDB execute_query: endpoint={self.api_endpoint}, query={query[:100]}...")
         
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -25,6 +45,7 @@ class MindsDBService:
                     headers={"Content-Type": "application/json"},
                     json={"query": query}
                 )
+                logger.info(f"MindsDB response status: {response.status_code}")
                 result = response.json()
                 execution_time = time.time() - start_time
                 
@@ -133,16 +154,78 @@ class MindsDBService:
         return await self.execute_query(query)
     
     async def create_database(self, name: str, engine: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Create a new database connection (data source)"""
-        # Build parameters string
-        params_str = json.dumps(parameters)
+        """Create a new database connection (data source) via REST API using sync requests"""
+        import logging
+        import requests
+        import asyncio
+        from concurrent.futures import ThreadPoolExecutor
         
-        query = f"""
-        CREATE DATABASE {name}
-        WITH ENGINE = '{engine}',
-        PARAMETERS = {params_str}
-        """
-        return await self.execute_query(query.strip())
+        logger = logging.getLogger(__name__)
+        
+        # Use REST API with sync requests (httpx has issues in uvicorn context)
+        api_url = f"{self.base_url}/api/databases/"
+        
+        payload = {
+            "database": {
+                "name": name,
+                "engine": engine,
+                "parameters": parameters
+            }
+        }
+        
+        logger.info(f"Creating database via REST API: {api_url}")
+        print(f"Creating database via REST API: {api_url}")
+        
+        def sync_request():
+            return requests.post(
+                api_url,
+                headers={"Content-Type": "application/json"},
+                json=payload,
+                timeout=60
+            )
+        
+        try:
+            # Run sync request in thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
+            with ThreadPoolExecutor() as pool:
+                response = await loop.run_in_executor(pool, sync_request)
+            
+            logger.info(f"REST API response status: {response.status_code}")
+            print(f"REST API response status: {response.status_code}")
+            
+            if response.status_code in [200, 201]:
+                return {
+                    "type": "ok",
+                    "columns": [],
+                    "data": [],
+                    "row_count": 0,
+                    "error": None,
+                    "execution_time": 0
+                }
+            else:
+                error_data = response.json() if response.text else {}
+                error_msg = error_data.get("detail", error_data.get("title", response.text))
+                return {
+                    "type": "error",
+                    "columns": [],
+                    "data": [],
+                    "row_count": 0,
+                    "error": error_msg,
+                    "execution_time": 0
+                }
+        except Exception as e:
+            logger.error(f"REST API error: {e}")
+            print(f"REST API error: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                "type": "error",
+                "columns": [],
+                "data": [],
+                "row_count": 0,
+                "error": str(e),
+                "execution_time": 0
+            }
     
     async def drop_database(self, name: str) -> Dict[str, Any]:
         """Drop a database connection"""

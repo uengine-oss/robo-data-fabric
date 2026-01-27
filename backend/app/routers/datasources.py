@@ -183,8 +183,13 @@ async def create_datasource(
     # 2. MindsDB에 등록 (연결 검증은 MindsDB가 수행)
     if register_to in ["mindsdb", "both"]:
         try:
+            logger.info(f"Starting MindsDB registration for {datasource.name}")
+            logger.info(f"MindsDB service base_url: {mindsdb_service.base_url}")
+            
             # 기존 연결이 있으면 삭제
-            await mindsdb_service.drop_database(datasource.name)
+            logger.info("Dropping existing database if exists...")
+            drop_result = await mindsdb_service.drop_database(datasource.name)
+            logger.info(f"Drop result: {drop_result}")
             
             # MindsDB용 파라미터 준비
             mindsdb_params = datasource.parameters.copy()
@@ -219,7 +224,11 @@ async def create_datasource(
         except HTTPException:
             raise
         except Exception as e:
-            logger.warning(f"MindsDB registration failed: {e}")
+            import traceback
+            logger.error(f"MindsDB registration failed: {e}")
+            logger.error(traceback.format_exc())
+            print(f"MindsDB registration failed: {e}")
+            print(traceback.format_exc())
             raise HTTPException(
                 status_code=400, 
                 detail=f"연결 실패: {str(e)}"

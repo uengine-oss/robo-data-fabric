@@ -821,12 +821,19 @@ class SchemaIntrospectionService:
                     }
                 )
                 
-                # 4. Column 생성
+                # 4. Column 생성 (fqn 기준 MERGE - robo-analyzer와 일관성 유지)
                 for col in table.columns:
+                    # fqn 생성: schema.table.column (소문자)
+                    fqn = f"{schema.name}.{table.name}.{col.name}".lower()
+                    
                     await self.neo4j_service.execute_query(
                         """
                         MATCH (t:Table {name: $table_name, schema: $schema_name})
-                        MERGE (c:Column {name: $column_name, table: $table_name, schema: $schema_name})
+                        MERGE (c:Column {fqn: $fqn})
+                        ON CREATE SET 
+                            c.name = $column_name,
+                            c.table = $table_name,
+                            c.schema = $schema_name
                         SET c.type = $data_type,
                             c.nullable = $nullable,
                             c.primary_key = $primary_key,
@@ -836,6 +843,7 @@ class SchemaIntrospectionService:
                         MERGE (t)-[:HAS_COLUMN]->(c)
                         """,
                         {
+                            "fqn": fqn,
                             "datasource_name": datasource_name,
                             "table_name": table.name,
                             "schema_name": schema.name,
@@ -848,22 +856,21 @@ class SchemaIntrospectionService:
                         }
                     )
         
-        # 5. Foreign Key 관계 생성
+        # 5. Foreign Key 관계 생성 (fqn 기준 매칭)
         for fk in metadata.foreign_keys:
+            source_fqn = f"{fk.source_schema}.{fk.source_table}.{fk.source_column}".lower()
+            target_fqn = f"{fk.target_schema}.{fk.target_table}.{fk.target_column}".lower()
+            
             await self.neo4j_service.execute_query(
                 """
-                MATCH (sc:Column {name: $source_column, table: $source_table, schema: $source_schema})
-                MATCH (tc:Column {name: $target_column, table: $target_table, schema: $target_schema})
+                MATCH (sc:Column {fqn: $source_fqn})
+                MATCH (tc:Column {fqn: $target_fqn})
                 MERGE (sc)-[r:REFERENCES]->(tc)
                 SET r.constraint_name = $constraint_name
                 """,
                 {
-                    "source_schema": fk.source_schema,
-                    "source_table": fk.source_table,
-                    "source_column": fk.source_column,
-                    "target_schema": fk.target_schema,
-                    "target_table": fk.target_table,
-                    "target_column": fk.target_column,
+                    "source_fqn": source_fqn,
+                    "target_fqn": target_fqn,
                     "constraint_name": fk.name
                 }
             )
