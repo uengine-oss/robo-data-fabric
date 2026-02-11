@@ -37,6 +37,16 @@ class ExtractMetadataRequest(BaseModel):
     schemas: Optional[List[str]] = None
     password: Optional[str] = None  # 재인증 시 패스워드 전달
 
+
+class TestConnectionRequest(BaseModel):
+    """연결 테스트 요청 모델 (생성 전 파라미터 기반 테스트)"""
+    engine: str
+    host: str
+    port: Optional[int] = None
+    user: Optional[str] = None
+    password: Optional[str] = None
+    database: Optional[str] = None
+
 # 스키마 인트로스펙션 서비스 초기화
 introspection_service = SchemaIntrospectionService(neo4j_service)
 
@@ -351,18 +361,59 @@ async def get_sample_data(name: str, table: str, limit: int = 10, source: str = 
     }
 
 
+@router.post("/test-connection")
+async def test_connection_params(request: TestConnectionRequest):
+    """파라미터 기반 연결 테스트 (데이터소스 생성 전 사용)
+    
+    입력받은 host/port/user/password/database로 실제 DB에 직접 접속하여 연결 가능 여부를 확인합니다.
+    MindsDB 등록 여부와 무관하게 동작합니다.
+    """
+    engine = request.engine.lower()
+    
+    if engine not in AdapterFactory.supported_engines():
+        # 지원하지 않는 엔진은 MindsDB에 위임할 수밖에 없으므로 간단 응답
+        return {
+            "success": True,
+            "message": f"'{engine}' 엔진은 직접 테스트를 지원하지 않습니다. 연결 생성 시 MindsDB가 검증합니다."
+        }
+    
+    # AdapterFactory를 이용해 실제 DB에 직접 연결 테스트
+    connection_params = {
+        "host": request.host,
+        "port": request.port,
+        "user": request.user,
+        "password": request.password,
+        "database": request.database,
+    }
+    
+    try:
+        adapter = AdapterFactory.get_adapter(engine, connection_params)
+        if not adapter:
+            return {"success": False, "message": f"어댑터 생성 실패: {engine}"}
+        
+        await adapter.connect()
+        await adapter.disconnect()
+        return {"success": True, "message": "데이터베이스 연결 성공!"}
+    except Exception as e:
+        return {"success": False, "message": f"연결 실패: {str(e)}"}
+
+
 @router.post("/{name}/test")
 async def test_connection(name: str, source: str = Query("mindsdb")):
-    """Test connection to a data source"""
+    """기존 데이터소스 연결 테스트 (등록된 데이터소스용)"""
     if source == "mindsdb":
         tables = await mindsdb_service.get_tables(name)
         
-        if not tables:
-            result = await mindsdb_service.execute_query(f"SELECT 1 FROM {name}.dual")
-            if result["type"] == "error":
-                return {"success": False, "message": result["error"]}
+        if tables:
+            return {"success": True, "message": f"Connected successfully. Found {len(tables)} tables."}
         
-        return {"success": True, "message": f"Connected successfully. Found {len(tables)} tables."}
+        # 테이블이 없으면 MindsDB 데이터베이스 목록에서 등록 여부 확인
+        databases = await mindsdb_service.get_databases()
+        db_names = [db["name"] for db in databases]
+        if name in db_names:
+            return {"success": True, "message": "Connected successfully. No tables found yet."}
+        
+        return {"success": False, "message": f"Database '{name}' is not registered in MindsDB"}
     else:
         # Neo4j에서는 DataSource 노드 존재 여부 확인
         datasource = await neo4j_service.get_datasource(name)

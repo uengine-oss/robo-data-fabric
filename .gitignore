@@ -67,3 +67,7 @@ htmlcov/
 
 # TypeScript
 *.tsbuildinfo
+
+# Private Datas
+p_*
+.temp
