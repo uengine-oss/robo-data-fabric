@@ -2,7 +2,7 @@
 import json
 import logging
 import os
-from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
 from fastapi.responses import StreamingResponse
 from typing import List, Optional, Dict, Any
 from dataclasses import asdict
@@ -16,6 +16,7 @@ from ..schemas.datasource import (
     DATASOURCE_CONFIGS,
     DataSourceType
 )
+from ..services.connection_context import Neo4jOverride, set_override
 from ..services.mindsdb_service import mindsdb_service
 from ..services.neo4j_service import neo4j_service
 from ..services.schema_introspection import (
@@ -26,10 +27,20 @@ from ..services.schema_introspection import (
 
 logger = logging.getLogger(__name__)
 
+
+async def apply_neo4j_override(request: Request) -> None:
+    """매 요청마다 ``X-Neo4j-*`` 헤더(Electron)를 contextvar 에 설정 → Neo4jService 가 그 연결 사용.
+    헤더 없으면 None → .env 폴백."""
+    set_override(Neo4jOverride.from_headers(request.headers))
+
 # 환경변수: localhost를 MindsDB용 Docker 내부 호스트로 대치
 # 예: MINDSDB_REPLACE_LOCALHOST=host.docker.internal
 MINDSDB_REPLACE_LOCALHOST = os.getenv("MINDSDB_REPLACE_LOCALHOST", "host.docker.internal")
-router = APIRouter(prefix="/datasources", tags=["Data Sources"])
+router = APIRouter(
+    prefix="/datasources",
+    tags=["Data Sources"],
+    dependencies=[Depends(apply_neo4j_override)],
+)
 
 
 class ExtractMetadataRequest(BaseModel):

@@ -1,11 +1,18 @@
-"""Neo4j Service - DataSource Node Management"""
+"""Neo4j Service - DataSource Node Management
+
+연결 출처: 요청 컨텍스트에 Neo4j override(Electron ``X-Neo4j-*`` 헤더)가 있으면 그 값을,
+없으면(브라우저/테스트) ``.env`` 를 쓴다 — analyzer / catalog 와 동일 계약.
+드라이버는 연결별로 캐싱한다(요청마다 새로 만들지 않음).
+"""
 import os
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from neo4j import AsyncGraphDatabase
 from dataclasses import dataclass
 
+from .connection_context import get_override
 
-@dataclass
+
+@dataclass(frozen=True)
 class Neo4jConfig:
     """Neo4j 연결 설정"""
     uri: str
@@ -16,7 +23,7 @@ class Neo4jConfig:
 
 class Neo4jService:
     """Neo4j를 사용한 DataSource 관리 서비스"""
-    
+
     def __init__(self, config: Neo4jConfig = None):
         if config is None:
             config = Neo4jConfig(
@@ -26,27 +33,40 @@ class Neo4jService:
                 database=os.getenv("NEO4J_DATABASE", "neo4j")
             )
         self.config = config
-        self._driver = None
-    
-    async def _get_driver(self):
-        """드라이버 lazy 초기화"""
-        if self._driver is None:
-            self._driver = AsyncGraphDatabase.driver(
-                self.config.uri,
-                auth=(self.config.user, self.config.password)
-            )
-        return self._driver
-    
+        self._drivers: Dict[Tuple[str, str, str], Any] = {}
+
+    def _resolve_config(self) -> Neo4jConfig:
+        """이 요청이 쓸 연결 — Electron override 우선, 없으면 .env."""
+        override = get_override()
+        if override is None:
+            return self.config
+        return Neo4jConfig(
+            uri=override.uri,
+            user=override.user,
+            password=override.password,
+            database=override.database or self.config.database,
+        )
+
+    async def _get_driver(self, config: Neo4jConfig):
+        """연결별 드라이버 lazy 초기화 + 캐싱"""
+        key = (config.uri, config.user, config.password)
+        driver = self._drivers.get(key)
+        if driver is None:
+            driver = AsyncGraphDatabase.driver(config.uri, auth=(config.user, config.password))
+            self._drivers[key] = driver
+        return driver
+
     async def close(self):
-        """드라이버 종료"""
-        if self._driver:
-            await self._driver.close()
-            self._driver = None
-    
+        """모든 드라이버 종료"""
+        for driver in self._drivers.values():
+            await driver.close()
+        self._drivers.clear()
+
     async def execute_query(self, query: str, params: Dict[str, Any] = None) -> List[Dict]:
-        """Cypher 쿼리 실행"""
-        driver = await self._get_driver()
-        async with driver.session(database=self.config.database) as session:
+        """Cypher 쿼리 실행 (요청 컨텍스트의 연결 사용)"""
+        config = self._resolve_config()
+        driver = await self._get_driver(config)
+        async with driver.session(database=config.database) as session:
             result = await session.run(query, params or {})
             records = await result.data()
             return records
