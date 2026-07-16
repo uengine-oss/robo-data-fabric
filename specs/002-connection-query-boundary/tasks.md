@@ -10,4 +10,4 @@
 - [x] T007A datasource/read-only SQL/max_rows 구조 계약으로 모든 생산자·소비자를 함께 이동한다.
 - [x] T007B mutation·다중 statement·주석/문자열 우회와 row-limit을 반증한다.
 - [x] T008 README와 실행·API 문서를 실제 구조로 다시 작성한다.
-- [ ] T009 정적 검색·단위·통합·실 DB·중앙 UI E2E를 통과하고 자기반증한다.
+- [x] T009 정적 검색·단위·통합·실 DB·중앙 UI E2E를 통과하고 자기반증한다.
