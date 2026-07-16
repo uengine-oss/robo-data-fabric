@@ -1,11 +1,11 @@
 # Feature Specification: 요청별 Neo4j 연결 override
 
 **Created**: 2026-07-14
-**Status**: Implementing
+**Status**: Completed; lifecycle details superseded by spec 002
 
 ## Problem
 
-Data Fabric의 DataSource 등록과 메타데이터 추출은 프로세스 `.env`의 Neo4j에만 기록됐다.
+Data Fabric의 DataSource registry는 프로세스 `.env`의 Neo4j에만 기록됐다.
 Electron에서 다른 연결을 선택해도 해당 요청이 선택 DB를 사용하지 않아 UI와 저장 결과가 갈라졌다.
 
 ## Requirements
