@@ -3,6 +3,7 @@ import unittest
 from pydantic import ValidationError
 
 from app.main import app
+from app.contracts.query_api import QueryRequest
 from app.http.datasource_endpoints import TestConnectionRequest
 
 
@@ -33,6 +34,14 @@ class HttpSurfaceTest(unittest.TestCase):
             TestConnectionRequest(engine="postgres;DROP", host="127.0.0.1")
         with self.assertRaises(ValidationError):
             TestConnectionRequest(engine="postgres", host="127.0.0.1", port=70000)
+
+    def test_query_contract_bounds_datasource_query_and_rows(self) -> None:
+        request = QueryRequest(datasource="shopmall", query="SELECT 1", max_rows=1)
+        self.assertEqual(request.max_rows, 1)
+        with self.assertRaises(ValidationError):
+            QueryRequest(datasource="shopmall;DROP", query="SELECT 1", max_rows=1)
+        with self.assertRaises(ValidationError):
+            QueryRequest(datasource="shopmall", query="SELECT 1", max_rows=1001)
 
 
 if __name__ == "__main__":

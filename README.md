@@ -11,7 +11,7 @@ backend/app/
   main.py                         FastAPI 조립
   http/                           공개 endpoint
     datasource_endpoints.py       연결 CRUD·검사·table/schema/sample
-    query_endpoints.py            MindsDB query·status
+    query_endpoints.py            구조화 read-only query·MindsDB status
   contracts/                      Pydantic request/response 계약
   connections/                    외부 시스템 adapter
     datasource_registry.py        비밀정보 없는 Neo4j DataSource registry
@@ -50,10 +50,15 @@ $env:PYTHONPATH='.'
 - `GET /api/datasources/{name}/tables` — 실제 테이블 목록
 - `GET /api/datasources/{name}/tables/{table}/schema` — 실제 컬럼 구조
 - `GET /api/datasources/{name}/tables/{table}/sample` — 제한된 실제 sample
-- `POST /api/query` — MindsDB SQL 실행
+- `POST /api/query` — `{datasource, query, max_rows}` 대상 DB read-only SELECT/CTE 실행.
+  Data Fabric이 MindsDB wrapper와 최종 행 제한을 조립하며 mutation·다중 statement를 거부합니다.
 - `GET /api/query/status` — MindsDB 상태
 
 metadata extraction, materialized table, model, job, knowledge-base endpoint는 제공하지 않습니다.
+query HTTP timeout은 `DATA_FABRIC_QUERY_TIMEOUT_SECONDS`로 설정하며 기본 30초, 허용 범위는
+0.1~300초입니다. HTTP timeout은 대기 상한이며 이미 시작된 대상 DB 작업의 취소를 보장하지 않습니다.
+SQL scanner는 방어 계층이지 DB 권한을 대신하지 않으므로 운영 datasource 계정에도 read-only·최소 권한을
+부여해야 합니다.
 
 ## Verify
 

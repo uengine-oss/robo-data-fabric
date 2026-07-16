@@ -6,6 +6,8 @@ from typing import Optional, Dict, Any, List, Tuple
 import os
 import re
 
+from ..system.settings import settings
+
 
 _CONNECTOR_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]{0,127}$")
 _ENGINE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
@@ -33,9 +35,9 @@ def _quote_identifier(value: str, field: str) -> str:
 class MindsDBService:
     """Service for interacting with MindsDB HTTP SQL API"""
     
-    def __init__(self, base_url: str = None):
+    def __init__(self, base_url: str = None, timeout: float | None = None):
         self._fixed_base_url = base_url
-        self.timeout = 120.0
+        self.timeout = settings.query_timeout_seconds if timeout is None else timeout
     
     @property
     def base_url(self) -> str:

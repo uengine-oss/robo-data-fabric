@@ -1,16 +1,22 @@
-"""Public MindsDB query and status contracts."""
+"""Public read-only query and MindsDB status contracts."""
 from pydantic import BaseModel, Field
-from typing import Optional, List, Any, Dict
+from typing import Optional, List, Any
 
 
 class QueryRequest(BaseModel):
-    """Request schema for SQL query execution"""
-    query: str = Field(..., description="SQL query to execute")
+    """대상 datasource에서 실행할 bounded read-only SQL."""
+    datasource: str = Field(
+        ..., min_length=1, max_length=128, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$"
+    )
+    query: str = Field(..., min_length=1, max_length=100_000)
+    max_rows: int = Field(default=100, ge=1, le=1000)
     
     class Config:
         json_schema_extra = {
             "example": {
-                "query": "SELECT * FROM information_schema.databases"
+                "datasource": "shopmall",
+                "query": "SELECT * FROM public.orders",
+                "max_rows": 100,
             }
         }
 
@@ -18,8 +24,8 @@ class QueryRequest(BaseModel):
 class QueryResponse(BaseModel):
     """Response schema for query execution"""
     type: str  # "table" or "ok" or "error"
-    columns: List[str] = []
-    data: List[List[Any]] = []
+    columns: List[str] = Field(default_factory=list)
+    data: List[List[Any]] = Field(default_factory=list)
     row_count: int = 0
     error: Optional[str] = None
     execution_time: Optional[float] = None

@@ -1,5 +1,8 @@
 import asyncio
 import unittest
+from unittest.mock import patch
+
+import httpx
 
 from app.connections.mindsdb_gateway import MindsDBService, _quote_identifier, _safe_connector_name
 
@@ -40,6 +43,26 @@ async def test_connection_inspection_executes_target_native_query() -> None:
     ]
 
 
+class _TimeoutClient:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, traceback):
+        return False
+
+    async def post(self, *args, **kwargs):
+        raise httpx.ReadTimeout("controlled timeout")
+
+
+async def test_query_timeout_is_returned_as_explicit_error() -> None:
+    service = MindsDBService("http://timeout.test", timeout=0.1)
+    with patch("app.connections.mindsdb_gateway.httpx.AsyncClient", return_value=_TimeoutClient()):
+        result = await service.execute_query("SELECT 1")
+    assert result["type"] == "error"
+    assert "timeout" in result["error"].lower()
+    assert result["execution_time"] >= 0
+
+
 class MindsDBGatewayTest(unittest.IsolatedAsyncioTestCase):
     def test_identifier_boundary(self) -> None:
         test_identifiers_are_validated_or_escaped_at_the_right_boundary()
@@ -49,6 +72,9 @@ class MindsDBGatewayTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_inspection_uses_target_database(self) -> None:
         await test_connection_inspection_executes_target_native_query()
+
+    async def test_timeout_is_not_reported_as_success(self) -> None:
+        await test_query_timeout_is_returned_as_explicit_error()
 
 
 if __name__ == "__main__":
