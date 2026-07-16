@@ -7,6 +7,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 LEDGER = Path(__file__).with_name("audit-ledger.tsv")
+BASELINE_COMMIT = "f95d9c130f7fb5fabe260e8d74bfe5cb448af6e6"
 FIELDS = (
     "path", "responsibility", "producer", "consumer",
     "maintainability_dry_naming", "dependencies_contracts", "errors_operations",
@@ -25,7 +26,7 @@ def current_files() -> set[str]:
 def baseline_files() -> set[str]:
     """R1B 시작 기준인 현재 HEAD 파일을 보존해 삭제 판정도 장부에서 사라지지 않게 한다."""
     output = subprocess.run(
-        ["git", "-c", "core.quotePath=false", "ls-tree", "-r", "--name-only", "HEAD"],
+        ["git", "-c", "core.quotePath=false", "ls-tree", "-r", "--name-only", BASELINE_COMMIT],
         cwd=REPO, check=True, capture_output=True, text=True, encoding="utf-8",
     ).stdout.splitlines()
     return {path for path in output if path}

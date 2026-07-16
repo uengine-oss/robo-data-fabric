@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextvars
 from dataclasses import dataclass
 from typing import Mapping, Optional
+from urllib.parse import urlsplit
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,11 @@ class Neo4jOverride:
         uri = headers.get("x-neo4j-uri")
         if not uri:
             return None
+        parsed = urlsplit(uri)
+        if parsed.scheme not in {"bolt", "bolt+s", "bolt+ssc", "neo4j", "neo4j+s", "neo4j+ssc"}:
+            raise ValueError("unsupported Neo4j URI scheme")
+        if not parsed.hostname or parsed.username or parsed.password or len(uri) > 2048:
+            raise ValueError("invalid Neo4j URI")
         return cls(
             uri=uri,
             user=headers.get("x-neo4j-user", "neo4j"),

@@ -23,6 +23,11 @@ class ConnectionContextTest(unittest.TestCase):
         set_override(None)
         self.assertIsNone(get_override())
 
+    def test_override_rejects_non_neo4j_and_embedded_credentials(self) -> None:
+        for uri in ("http://127.0.0.1:7687", "bolt://user:pass@127.0.0.1:7687", "bolt:///missing"):
+            with self.subTest(uri=uri), self.assertRaises(ValueError):
+                Neo4jOverride.from_headers({"x-neo4j-uri": uri})
+
     def test_service_resolves_override_then_fallback(self) -> None:
         fallback = Neo4jConfig("bolt://fallback:7687", "neo4j", "fallback", "neo4j")
         service = Neo4jService(fallback)

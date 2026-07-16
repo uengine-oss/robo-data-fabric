@@ -23,6 +23,9 @@ class Settings:
     host: str = os.getenv("DATA_FABRIC_HOST", "0.0.0.0")
     port: int = int(os.getenv("DATA_FABRIC_PORT", "8404"))
     cors_origins: tuple[str, ...] = _origins()
+    allow_neo4j_header_override: bool = (
+        os.getenv("DATA_FABRIC_ALLOW_NEO4J_HEADER_OVERRIDE", "false").lower() == "true"
+    )
 
 
 settings = Settings()

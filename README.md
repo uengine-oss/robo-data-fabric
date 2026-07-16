@@ -39,6 +39,8 @@ $env:PYTHONPATH='.'
 
 환경변수는 `env.example`을 기준으로 설정합니다. 배포 manifest는 이 저장소 안에 두지 않고 workspace의
 별도 배포 프로젝트에서 관리합니다.
+요청별 `X-Neo4j-*` 연결 override는 기본 비활성화이며, Electron 로컬 환경에서만
+`DATA_FABRIC_ALLOW_NEO4J_HEADER_OVERRIDE=true`로 명시적으로 활성화합니다.
 
 ## Public API
 

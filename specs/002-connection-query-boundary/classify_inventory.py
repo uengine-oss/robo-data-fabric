@@ -90,7 +90,7 @@ def classify(path: str) -> dict[str, str]:
             "dependencies_contracts": "public HTTP shape preserved except explicitly retired endpoints",
             "errors_operations": "move verified by imports and compile",
             "performance_security_generality": "no compatibility mirror retained",
-            "docs_tests": "rg old imports 0; 10 tests pass",
+            "docs_tests": "rg old imports 0; 16 tests pass",
             "decision": "deleted", "evidence": "git mv history maps to final responsibility package",
         }
 
@@ -117,7 +117,7 @@ def classify(path: str) -> dict[str, str]:
             "errors_operations": "sanitized failures and create compensation; bounded sample limit",
             "performance_security_generality": "credentials only forwarded to MindsDB; no secret logging",
             "docs_tests": "OpenAPI removed/required route contract",
-            "decision": "fixed", "evidence": "HTTP surface contract and 10-test suite pass",
+            "decision": "fixed", "evidence": "HTTP surface contract and 16-test suite pass",
         }
 
     if path.startswith("backend/app/contracts/"):
@@ -142,7 +142,7 @@ def classify(path: str) -> dict[str, str]:
             "dependencies_contracts": "registry, gateway, context, HTTP, and saga contracts fixed",
             "errors_operations": "normal and compensation failure paths covered",
             "performance_security_generality": "credential and injection boundaries asserted without network secrets",
-            "docs_tests": "10 tests discovered and passed",
+            "docs_tests": "16 tests discovered and passed",
             "decision": "fixed", "evidence": "python -m unittest discover -s tests -t .",
         }
 

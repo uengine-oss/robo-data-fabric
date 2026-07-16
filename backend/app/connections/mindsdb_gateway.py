@@ -261,12 +261,15 @@ class MindsDBService:
         return await self.execute_query(query)
 
     async def inspect_database(self, name: str) -> Dict[str, Any]:
-        """등록 여부가 아니라 실제 table 접근 성공 여부로 연결 상태를 확인한다."""
+        """등록 여부가 아니라 대상 DB가 직접 실행한 native SELECT로 연결을 확인한다."""
         name = _safe_connector_name(name)
-        result = await self.execute_query(f"SHOW TABLES FROM {_quote_identifier(name, 'database name')}")
+        connector = _quote_identifier(name, "database name")
+        result = await self.execute_query(
+            f"SELECT * FROM {connector} (SELECT 1 AS robo_connection_probe)"
+        )
         return {
-            "success": result["type"] == "table",
-            "table_count": result["row_count"] if result["type"] == "table" else 0,
+            "success": result["type"] == "table" and result["data"] == [[1]],
+            "table_count": 0,
         }
 
 

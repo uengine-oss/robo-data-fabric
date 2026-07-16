@@ -7,12 +7,13 @@ from typing import Any, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..contracts.datasource_api import DataSourceCreate, DataSourceList, DataSourceResponse
 from ..connections.neo4j_context import Neo4jOverride, set_override
 from ..connections.mindsdb_gateway import mindsdb_gateway
 from ..connections.datasource_registry import datasource_registry
+from ..system.settings import settings
 
 
 logger = logging.getLogger(__name__)
@@ -21,7 +22,13 @@ MINDSDB_REPLACE_LOCALHOST = os.getenv("MINDSDB_REPLACE_LOCALHOST", "host.docker.
 
 async def apply_neo4j_override(request: Request) -> None:
     """Electron이 선택한 Neo4j 연결을 요청 context에 설정한다."""
-    set_override(Neo4jOverride.from_headers(request.headers))
+    try:
+        override = Neo4jOverride.from_headers(request.headers)
+    except ValueError as exc:
+        raise HTTPException(400, "Invalid Neo4j override headers") from exc
+    if override is not None and not settings.allow_neo4j_header_override:
+        raise HTTPException(403, "Neo4j header override is disabled")
+    set_override(override)
 
 
 router = APIRouter(
@@ -32,12 +39,12 @@ router = APIRouter(
 
 
 class TestConnectionRequest(BaseModel):
-    engine: str
-    host: str = ""
-    port: Optional[int] = None
-    user: Optional[str] = None
-    password: Optional[str] = None
-    database: Optional[str] = None
+    engine: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z_][A-Za-z0-9_-]*$")
+    host: str = Field(default="", max_length=255)
+    port: Optional[int] = Field(default=None, ge=1, le=65535)
+    user: Optional[str] = Field(default=None, max_length=512)
+    password: Optional[str] = Field(default=None, max_length=4096)
+    database: Optional[str] = Field(default=None, max_length=512)
 
 
 def _mindsdb_parameters(parameters: dict[str, Any]) -> dict[str, Any]:
@@ -53,6 +60,19 @@ def _registry_parameters(parameters: dict[str, Any]) -> dict[str, Any]:
     """비밀 키가 registry 계층에 도달하지 않도록 HTTP 경계에서 allowlist한다."""
     allowed = {"host", "port", "database", "user", "username", "display_name"}
     return {key: value for key, value in parameters.items() if key in allowed}
+
+
+async def _drop_mindsdb_connection(name: str, *, operation: str) -> bool:
+    """부분 실패 시 MindsDB 연결을 정리하고 정리 실패를 관측 가능하게 남긴다."""
+    try:
+        result = await mindsdb_gateway.drop_database(name)
+    except Exception:
+        logger.exception("MindsDB connection cleanup raised", extra={"name": name, "operation": operation})
+        return False
+    if result["type"] == "error":
+        logger.error("MindsDB connection cleanup failed", extra={"name": name, "operation": operation})
+        return False
+    return True
 
 
 @router.get("", response_model=DataSourceList)
@@ -73,15 +93,12 @@ async def test_connection_params(request: TestConnectionRequest) -> dict[str, An
         )
         if result["type"] == "error":
             return {"success": False, "message": "데이터베이스 연결에 실패했습니다."}
+        inspection = await mindsdb_gateway.inspect_database(probe_name)
+        if not inspection["success"]:
+            return {"success": False, "message": "데이터베이스 연결에 실패했습니다."}
         return {"success": True, "message": "데이터베이스 연결에 성공했습니다."}
     finally:
-        try:
-            cleanup = await mindsdb_gateway.drop_database(probe_name)
-        except Exception:
-            logger.error("temporary MindsDB connection cleanup failed", extra={"probe_name": probe_name})
-        else:
-            if cleanup["type"] == "error":
-                logger.error("temporary MindsDB connection cleanup failed", extra={"probe_name": probe_name})
+        await _drop_mindsdb_connection(probe_name, operation="connection_probe")
 
 
 @router.post("", response_model=DataSourceResponse)
@@ -99,6 +116,15 @@ async def create_datasource(datasource: DataSourceCreate, request: Request) -> d
         raise HTTPException(status_code=400, detail="데이터베이스 연결 등록에 실패했습니다.")
 
     try:
+        inspection = await mindsdb_gateway.inspect_database(datasource.name)
+    except Exception as exc:
+        await _drop_mindsdb_connection(datasource.name, operation="target_inspection")
+        raise HTTPException(status_code=400, detail="대상 데이터베이스에 연결할 수 없습니다.") from exc
+    if not inspection["success"]:
+        await _drop_mindsdb_connection(datasource.name, operation="target_inspection")
+        raise HTTPException(status_code=400, detail="대상 데이터베이스에 연결할 수 없습니다.")
+
+    try:
         registry = await datasource_registry.create_datasource(
             name=datasource.name,
             engine=datasource.engine,
@@ -109,9 +135,7 @@ async def create_datasource(datasource: DataSourceCreate, request: Request) -> d
         if not registry:
             raise RuntimeError("registry returned no datasource")
     except Exception as exc:
-        compensation = await mindsdb_gateway.drop_database(datasource.name)
-        if compensation["type"] == "error":
-            logger.error("datasource create compensation failed", extra={"datasource": datasource.name})
+        await _drop_mindsdb_connection(datasource.name, operation="registry_create")
         raise HTTPException(status_code=500, detail="연결 registry 저장에 실패했습니다.") from exc
 
     return registry

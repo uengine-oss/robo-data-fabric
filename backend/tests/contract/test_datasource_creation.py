@@ -6,12 +6,15 @@ from starlette.requests import Request
 
 import app.http.datasource_endpoints as endpoints
 from app.contracts.datasource_api import DataSourceCreate
+from app.http.datasource_endpoints import TestConnectionRequest
 
 
 class _MindsDBFake:
-    def __init__(self) -> None:
+    def __init__(self, inspection_success: bool = True, inspection_error: Exception | None = None) -> None:
         self.created: list[tuple[str, str, dict]] = []
         self.dropped: list[str] = []
+        self.inspection_success = inspection_success
+        self.inspection_error = inspection_error
 
     async def create_database(self, name: str, engine: str, parameters: dict):
         self.created.append((name, engine, parameters))
@@ -20,6 +23,11 @@ class _MindsDBFake:
     async def drop_database(self, name: str):
         self.dropped.append(name)
         return {"type": "ok"}
+
+    async def inspect_database(self, name: str):
+        if self.inspection_error is not None:
+            raise self.inspection_error
+        return {"success": self.inspection_success, "table_count": 0}
 
 
 class _RegistryFake:
@@ -73,12 +81,70 @@ async def test_create_compensates_mindsdb_when_registry_fails() -> None:
     assert mindsdb.dropped == ["orders"]
 
 
+async def test_create_rejects_registered_but_unreachable_target() -> None:
+    mindsdb, registry = _MindsDBFake(inspection_success=False), _RegistryFake()
+    originals = endpoints.mindsdb_gateway, endpoints.datasource_registry
+    endpoints.mindsdb_gateway, endpoints.datasource_registry = mindsdb, registry
+    try:
+        with unittest.TestCase().assertRaises(HTTPException) as raised:
+            await endpoints.create_datasource(
+                DataSourceCreate(name="orders", engine="postgres", parameters={"host": "invalid"}),
+                _request(),
+            )
+    finally:
+        endpoints.mindsdb_gateway, endpoints.datasource_registry = originals
+    assert raised.exception.status_code == 400
+    assert mindsdb.dropped == ["orders"]
+    assert registry.parameters is None
+
+
+async def test_create_compensates_when_target_inspection_raises() -> None:
+    mindsdb, registry = _MindsDBFake(inspection_error=TimeoutError("target timeout")), _RegistryFake()
+    originals = endpoints.mindsdb_gateway, endpoints.datasource_registry
+    endpoints.mindsdb_gateway, endpoints.datasource_registry = mindsdb, registry
+    try:
+        with unittest.TestCase().assertRaises(HTTPException) as raised:
+            await endpoints.create_datasource(
+                DataSourceCreate(name="orders", engine="postgres", parameters={"host": "slow"}),
+                _request(),
+            )
+    finally:
+        endpoints.mindsdb_gateway, endpoints.datasource_registry = originals
+    assert raised.exception.status_code == 400
+    assert mindsdb.dropped == ["orders"]
+    assert registry.parameters is None
+
+
+async def test_connection_probe_checks_target_and_always_cleans_up() -> None:
+    mindsdb = _MindsDBFake(inspection_success=False)
+    original = endpoints.mindsdb_gateway
+    endpoints.mindsdb_gateway = mindsdb
+    try:
+        result = await endpoints.test_connection_params(
+            TestConnectionRequest(engine="postgres", host="invalid", port=1)
+        )
+    finally:
+        endpoints.mindsdb_gateway = original
+    assert result["success"] is False
+    assert len(mindsdb.created) == 1
+    assert mindsdb.dropped == [mindsdb.created[0][0]]
+
+
 class DataSourceCreationTest(unittest.IsolatedAsyncioTestCase):
     async def test_credentials_stop_at_registry_boundary(self) -> None:
         await test_create_keeps_credentials_out_of_registry_boundary()
 
     async def test_registry_failure_is_compensated(self) -> None:
         await test_create_compensates_mindsdb_when_registry_fails()
+
+    async def test_unreachable_target_is_rejected_before_registry(self) -> None:
+        await test_create_rejects_registered_but_unreachable_target()
+
+    async def test_target_inspection_exception_is_compensated(self) -> None:
+        await test_create_compensates_when_target_inspection_raises()
+
+    async def test_probe_requires_real_target_access_and_cleanup(self) -> None:
+        await test_connection_probe_checks_target_and_always_cleans_up()
 
 
 if __name__ == "__main__":
