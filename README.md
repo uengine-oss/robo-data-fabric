@@ -7,18 +7,21 @@ Catalog가 담당합니다. 별도 웹 프론트엔드는 없고 중앙 `robo-da
 ## Runtime structure
 
 ```text
-backend/app/
+
   main.py                         FastAPI 조립
-  http/                           공개 endpoint
-    datasource_endpoints.py       연결 CRUD·검사·table/schema/sample
-    query_endpoints.py            구조화 read-only query·MindsDB status
-  contracts/                      Pydantic request/response 계약
-  connections/                    외부 시스템 adapter
-    datasource_registry.py        비밀정보 없는 Neo4j DataSource registry
-    mindsdb_gateway.py             MindsDB 실제 DB 접근
-    neo4j_context.py               요청별 Neo4j 연결 context
-  system/settings.py              환경설정 단일 진실
-backend/tests/
+  api/                            공개 HTTP 경계
+    datasources.py                연결 CRUD·검사
+    tables.py                     table/schema/sample
+    query.py                      read-only query·MindsDB status
+    graph_connection.py           요청별 Neo4j override
+  contracts/                      Pydantic datasource/query 계약
+  credentials/                    credential·network 입력 경계
+  registry/                       Neo4j DataSource registry
+  mindsdb/                        MindsDB admin/table/transport와 quoting
+  readonly_query/                 SQL 정책·조립·실행 경계
+  settings.py                     환경설정 단일 진실
+  observability.py                운영 로깅
+tests/
   unit/                            adapter 단위 계약
   contract/                        HTTP surface·보상 동작 계약
 ```
@@ -34,7 +37,7 @@ cd backend
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 $env:PYTHONPATH='.'
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8404
+.\.venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8404
 ```
 
 환경변수는 `env.example`을 기준으로 설정합니다. 배포 manifest는 이 저장소 안에 두지 않고 workspace의

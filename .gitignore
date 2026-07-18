@@ -71,3 +71,6 @@ htmlcov/
 # Private Datas
 p_*
 .temp
+
+# Local code-index cache
+.codegraph/

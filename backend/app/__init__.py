@@ -1,1 +1,0 @@
-# MindsDB UI Backend
