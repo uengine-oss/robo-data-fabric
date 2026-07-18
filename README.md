@@ -33,7 +33,7 @@ tests/
 ## Run
 
 ```powershell
-cd backend
+cd D:\work\robo\project\robo-data-fabric
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 $env:PYTHONPATH='.'
@@ -47,8 +47,10 @@ $env:PYTHONPATH='.'
 
 ## Public API
 
-- `GET/POST/DELETE /api/datasources` — registry와 MindsDB 연결을 함께 관리
+- `GET/POST /api/datasources` — datasource 목록 조회와 registry/MindsDB 연결 생성
+- `GET/DELETE /api/datasources/{name}` — 단일 datasource 조회와 소유권 범위 삭제
 - `POST /api/datasources/test-connection` — 저장 없는 임시 실제 연결검사
+- `POST /api/datasources/{name}/test` — 등록된 datasource 실제 연결검사
 - `GET /api/datasources/{name}/health` — MindsDB 경유 실제 DB 접근 상태
 - `GET /api/datasources/{name}/tables` — 실제 테이블 목록
 - `GET /api/datasources/{name}/tables/{table}/schema` — 실제 컬럼 구조
@@ -66,10 +68,10 @@ SQL scanner는 방어 계층이지 DB 권한을 대신하지 않으므로 운영
 ## Verify
 
 ```powershell
-cd backend
+cd D:\work\robo\project\robo-data-fabric
 $env:PYTHONPATH='.'
 .\.venv\Scripts\python.exe -m unittest discover -s tests -t . -p "test_*.py"
-.\.venv\Scripts\python.exe -m compileall -q app tests
+.\.venv\Scripts\python.exe -m compileall -q main.py settings.py observability.py api contracts credentials registry mindsdb readonly_query tests
 ```
 
 통합 완료 판정에는 실제 MindsDB·Neo4j에서 생성→table/schema/sample→삭제를 수행하고, 삭제 전후 다른

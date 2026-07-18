@@ -1,7 +1,7 @@
 # Feature Specification: Data Fabric 전 파일 연결·실데이터 경계 재감사
 
 **Created**: 2026-07-17
-**Status**: In progress
+**Status**: Complete
 
 ## Requirements
 
@@ -20,9 +20,11 @@
 전체 inventory/ledger 일치, 잔재와 old ambiguous names 0, compile/full tests, 실제 MindsDB/대상 DB,
 Catalog sample contract, 중앙 UI datasource 생성·조회·삭제 Playwright가 통과한다.
 
-## GOAL-D final-structure binding
+## Final target-tree binding
 
-`D:/work/robo/GOAL-D/02-최종구조.md` §3 is a required executable contract.
+`D:/work/robo/세서비스-최종트리.md` §3 is the target-tree contract. It is a
+static target rather than an authority over source code, so the completed
+implementation, audit ledger, and executable verifier remain the final judges.
 
 - Move `system/settings.py` to `settings.py` with `FabricSettings`, and add the
   single-file observability owner.

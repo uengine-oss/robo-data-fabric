@@ -5,7 +5,7 @@
 - [x] T003 Apply explicit Data Fabric paths and symbol names with git history preservation.
 - [x] T004 Remove proven frontend/metadata/legacy residue and dead dependencies.
 - [x] T005 Update README/contracts and run static/full/real-DB/Catalog/UI verification.
-- [x] T006 Bind every current Fabric runtime file to GOAL-D §3.
+- [x] T006 Bind every current Fabric runtime file to `D:/work/robo/세서비스-최종트리.md` §3.
 - [x] T007 Implement the exact API/contracts/credentials/registry/mindsdb/readonly_query split.
 - [x] T008 Remove proven old paths and pass missing 0, forbidden 0, unclassified 0.
 
