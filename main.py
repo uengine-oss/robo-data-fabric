@@ -1,11 +1,15 @@
 """Data Fabric connection and real-data access API."""
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api import datasources, query, tables
-from observability import configure_logging
-from settings import settings
+from shared.config.settings import settings
 
-configure_logging()
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-7s | %(name)s | %(message)s",
+)
 
 app = FastAPI(
     title="Robo Data Fabric API",

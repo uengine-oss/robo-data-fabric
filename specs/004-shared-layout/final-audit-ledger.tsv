@@ -1,0 +1,8 @@
+path	owner	status
+shared/config/settings.py	shared configuration	verified
+queries/builder.py	query domain	verified
+queries/policy.py	query domain	verified
+main.py	service bootstrap and logging	verified
+settings.py	retired	absent
+observability.py	retired	absent
+readonly_query/	retired	absent

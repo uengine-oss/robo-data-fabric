@@ -13,7 +13,7 @@ from neo4j import AsyncGraphDatabase
 from .connection import get_override
 from .driver import Neo4jConfig
 from .scope import DATA_FABRIC_GRAPH_OWNER, DEFAULT_WORKSPACE_ID
-from settings import settings
+from shared.config.settings import settings
 
 
 logger = logging.getLogger(__name__)

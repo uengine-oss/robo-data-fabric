@@ -2,7 +2,7 @@
 from fastapi import HTTPException, Request
 
 from registry.connection import Neo4jOverride, set_override
-from settings import settings
+from shared.config.settings import settings
 
 
 async def apply_neo4j_override(request: Request) -> None:

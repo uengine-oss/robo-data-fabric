@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from api.graph_connection import apply_neo4j_override
 from contracts.query import MindsDBStatus, QueryRequest, QueryResponse
 from mindsdb.transport import mindsdb_gateway
-from readonly_query.builder import build_mindsdb_read_query
-from readonly_query.policy import ReadOnlyQueryError
+from queries.builder import build_mindsdb_read_query
+from queries.policy import ReadOnlyQueryError
 from registry.datasources import datasource_registry
 
 

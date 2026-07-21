@@ -1,0 +1,10 @@
+path	role	decision
+api	public datasource query and table HTTP boundary	keep
+contracts	public request and response schemas	keep
+credentials	allowlisted inputs and request-only network rewriting	keep
+mindsdb	MindsDB administration transport quoting and tables	keep
+queries	read-only SQL policy and bounded construction	keep
+registry	Neo4j DataSource registry and connection scope	keep
+shared	cross-domain infrastructure	keep
+shared/config	cross-domain process configuration	keep
+tests	runtime-owner verification	keep

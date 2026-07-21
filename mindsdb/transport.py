@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 
 from mindsdb import admin, tables
-from settings import settings
+from shared.config.settings import settings
 
 
 logger = logging.getLogger(__name__)

@@ -18,9 +18,9 @@ Catalog가 담당합니다. 별도 웹 프론트엔드는 없고 중앙 `robo-da
   credentials/                    credential·network 입력 경계
   registry/                       Neo4j DataSource registry
   mindsdb/                        MindsDB admin/table/transport와 quoting
-  readonly_query/                 SQL 정책·조립·실행 경계
-  settings.py                     환경설정 단일 진실
-  observability.py                운영 로깅
+  queries/                        SQL 정책·조립·실행 경계
+  shared/                         공통 인프라
+    config/settings.py            환경설정 단일 진실
 tests/
   unit/                            adapter 단위 계약
   contract/                        HTTP surface·보상 동작 계약
@@ -71,7 +71,7 @@ SQL scanner는 방어 계층이지 DB 권한을 대신하지 않으므로 운영
 cd D:\work\robo\project\robo-data-fabric
 $env:PYTHONPATH='.'
 .\.venv\Scripts\python.exe -m unittest discover -s tests -t . -p "test_*.py"
-.\.venv\Scripts\python.exe -m compileall -q main.py settings.py observability.py api contracts credentials registry mindsdb readonly_query tests
+.\.venv\Scripts\python.exe -m compileall -q main.py api contracts credentials registry mindsdb queries shared tests
 ```
 
 통합 완료 판정에는 실제 MindsDB·Neo4j에서 생성→table/schema/sample→삭제를 수행하고, 삭제 전후 다른

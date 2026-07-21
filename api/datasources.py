@@ -14,7 +14,7 @@ from credentials.allowlist import registry_parameters
 from credentials.network_rewrite import mindsdb_parameters
 from mindsdb.transport import mindsdb_gateway
 from registry.datasources import datasource_registry
-from settings import settings
+from shared.config.settings import settings
 
 
 logger = logging.getLogger(__name__)

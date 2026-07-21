@@ -1,7 +1,7 @@
 import unittest
 
-from readonly_query.builder import build_mindsdb_read_query
-from readonly_query.policy import ReadOnlyQueryError, validate_read_only_query
+from queries.builder import build_mindsdb_read_query
+from queries.policy import ReadOnlyQueryError, validate_read_only_query
 
 
 class ReadOnlySqlTest(unittest.TestCase):

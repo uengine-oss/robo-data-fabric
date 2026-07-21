@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from settings import _bounded_int, _strict_bool
+from shared.config.settings import _bounded_int, _strict_bool
 
 
 class FabricSettingsTest(unittest.TestCase):
