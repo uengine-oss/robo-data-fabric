@@ -31,9 +31,6 @@ class TestConnectionRequest(BaseModel):
 class DataSourceResponse(BaseModel):
     name: str
     engine: str
-    datasource_id: Optional[str] = None
-    graph_owner: Optional[str] = None
-    workspace_id: Optional[str] = None
     display_name: Optional[str] = None
     host: Optional[str] = None
     port: Optional[int] = None

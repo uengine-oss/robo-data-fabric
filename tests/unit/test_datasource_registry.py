@@ -13,7 +13,7 @@ class _RecordingRegistry(DatasourceRegistry):
     async def execute_query(self, query: str, params: dict | None = None):
         self.calls.append((query, params or {}))
         if "RETURN ds" in query:
-            return [{"datasource": {"datasource_id": "ds-1", "name": "orders"}}]
+            return [{"datasource": {"name": "orders", "engine": "postgres"}}]
         return [{"deleted": 1}]
 
 
@@ -22,16 +22,16 @@ async def test_registry_never_persists_or_returns_credentials() -> None:
     result = await registry.create_datasource(
         "orders", "postgres",
         {"host": "db", "port": 5432, "database": "orders", "user": "app", "password": "secret"},
-        workspace_id="workspace-a",
     )
     query, params = registry.calls[0]
-    assert result["datasource_id"] == "ds-1"
+    assert result == {"name": "orders", "engine": "postgres"}
     assert "password" not in query.lower() and "api_key" not in query.lower()
     assert "password" not in params and "api_key" not in params
-    assert "datasource_id" in query
-    assert "graph_owner" in query and params["graph_owner"] == "data-fabric"
-    assert params["registry_key"] == "data-fabric:orders"
-    assert "workspace_id" in query
+    assert "datasource_id" not in query
+    assert "graph_owner" not in query
+    assert "workspace_id" not in query
+    assert "registry_key" not in query
+    assert "_owner" in query and params["owner"] == "data-fabric"
 
 
 async def test_delete_only_removes_the_owned_registry_node() -> None:
@@ -41,16 +41,17 @@ async def test_delete_only_removes_the_owned_registry_node() -> None:
     assert "(ds:DataSource" in query
     assert "HAS_SCHEMA" not in query and "HAS_TABLE" not in query and "HAS_COLUMN" not in query
     assert "MATCH (n)" not in query
-    assert registry.calls[0][1]["graph_owner"] == "data-fabric"
+    assert registry.calls[0][1]["owner"] == "data-fabric"
 
 
 async def test_constraints_replace_cross_owner_name_uniqueness() -> None:
     registry = _RecordingRegistry()
     await registry.ensure_constraints()
     queries = [query for query, _ in registry.calls]
-    assert queries[0] == "DROP CONSTRAINT datasource_name IF EXISTS"
-    assert any("registry_key" in query for query in queries)
-    assert not any("REQUIRE ds.name IS UNIQUE" in query for query in queries)
+    assert queries == [
+        "CREATE CONSTRAINT data_fabric_datasource_identity IF NOT EXISTS "
+        "FOR (ds:DataSource) REQUIRE (ds._owner, ds.name) IS UNIQUE"
+    ]
 
 
 class DataSourceRegistryTest(unittest.IsolatedAsyncioTestCase):

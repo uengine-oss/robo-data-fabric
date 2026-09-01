@@ -5,7 +5,7 @@ import logging
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from contracts.datasources import (
     DataSourceCreate, DataSourceList, DataSourceResponse, TestConnectionRequest,
 )
@@ -115,7 +115,7 @@ async def test_connection_params(request: TestConnectionRequest) -> dict[str, An
 
 
 @router.post("", response_model=DataSourceResponse)
-async def create_datasource(datasource: DataSourceCreate, request: Request) -> dict[str, Any]:
+async def create_datasource(datasource: DataSourceCreate) -> dict[str, Any]:
     """MindsDB 연결과 Neo4j registry를 하나의 보상 가능한 생성 작업으로 등록한다."""
     if await datasource_registry.get_datasource(datasource.name):
         raise HTTPException(status_code=409, detail=f"DataSource '{datasource.name}' already exists")
@@ -145,7 +145,6 @@ async def create_datasource(datasource: DataSourceCreate, request: Request) -> d
             engine=datasource.engine,
             parameters=registry_parameters(datasource.parameters),
             display_name=datasource.parameters.get("display_name", datasource.name),
-            workspace_id=request.headers.get("x-workspace-id", "default"),
         )
         if not registry:
             raise RuntimeError("registry returned no datasource")
