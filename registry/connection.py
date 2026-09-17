@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from typing import Mapping, Optional
 from urllib.parse import urlsplit
 
+from shared.config.settings import settings
+
 
 @dataclass(frozen=True)
 class Neo4jOverride:
@@ -38,7 +40,21 @@ class Neo4jOverride:
         """``X-Neo4j-*`` 헤더 → override. URI 없으면(=브라우저/테스트) None → env 폴백."""
         uri = headers.get("x-neo4j-uri")
         if not uri:
-            return None
+            # **대상 graph 만 정해 주는 호출자가 있다.** 브라우저에서 도는 화면은
+            # 연결 자격을 클라이언트로 내보내지 않으므로 URI·비밀번호를 실을 수 없고,
+            # 프로젝트마다 graph 를 가르기 위해 `X-Neo4j-Database` 만 보낸다.
+            #
+            # 여기서 `None` 을 돌려주면 그 요청이 **프로세스 환경에 고정된 graph** 로
+            # 가고, 남의 데이터가 자기 것처럼 나온다. **오류가 안 난다** — 2026-09-17
+            # 실측(catalog 쪽): 3건·7건을 심은 두 graph 를 헤더로 각각 물었는데 둘 다
+            # 0 이 왔다. 403 도 안 났다 — override 플래그 검사는 `None` 을 안 본다.
+            database = headers.get("x-neo4j-database") or None
+            if not database:
+                return None
+            if database.lower() == "system":
+                raise ValueError("Neo4j system database is forbidden")
+            return cls(uri=settings.neo4j_uri, user=settings.neo4j_user,
+                       password=settings.neo4j_password, database=database)
         parsed = urlsplit(uri)
         if parsed.scheme not in {"bolt", "bolt+s", "bolt+ssc", "neo4j", "neo4j+s", "neo4j+ssc"}:
             raise ValueError("unsupported Neo4j URI scheme")
