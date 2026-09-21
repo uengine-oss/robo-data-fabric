@@ -12,7 +12,7 @@ from neo4j import AsyncGraphDatabase
 
 from .connection import get_override
 from .driver import Neo4jConfig
-from .scope import DATA_FABRIC_GRAPH_OWNER, DEFAULT_WORKSPACE_ID
+from .scope import DATA_FABRIC_GRAPH_OWNER
 from shared.config.settings import settings
 
 
@@ -68,15 +68,11 @@ class DatasourceRegistry:
         engine: str,
         parameters: dict[str, Any],
         display_name: str | None = None,
-        workspace_id: str = DEFAULT_WORKSPACE_ID,
     ) -> Optional[dict[str, Any]]:
         """안전한 연결 식별 정보만 저장한다. parameters는 allowlist로 축소한다."""
         query = """
         CREATE (ds:DataSource {
-            datasource_id: randomUUID(),
-            registry_key: $registry_key,
-            graph_owner: $graph_owner,
-            workspace_id: $workspace_id,
+            _owner: $owner,
             name: $name,
             engine: $engine,
             display_name: $display_name,
@@ -88,18 +84,15 @@ class DatasourceRegistry:
             updated_at: datetime()
         })
         RETURN ds {
-            .datasource_id, .graph_owner, .workspace_id,
             .name, .engine, .display_name, .host, .port, .database, .user,
             created_at: toString(ds.created_at)
         } AS datasource
         """
         safe_params = {
             "name": name,
-            "registry_key": f"{DATA_FABRIC_GRAPH_OWNER}:{name}",
-            "graph_owner": DATA_FABRIC_GRAPH_OWNER,
+            "owner": DATA_FABRIC_GRAPH_OWNER,
             "engine": engine,
             "display_name": display_name or name,
-            "workspace_id": workspace_id or DEFAULT_WORKSPACE_ID,
             "host": parameters.get("host", ""),
             "port": parameters.get("port", 0),
             "database": parameters.get("database", ""),
@@ -110,9 +103,8 @@ class DatasourceRegistry:
 
     async def get_datasources(self) -> list[dict[str, Any]]:
         query = """
-        MATCH (ds:DataSource {graph_owner: $graph_owner})
+        MATCH (ds:DataSource {_owner: $owner})
         RETURN ds {
-            .datasource_id, .graph_owner, .workspace_id,
             .name, .engine, .display_name, .host, .port, .database, .user,
             created_at: toString(ds.created_at)
         } AS datasource
@@ -121,21 +113,20 @@ class DatasourceRegistry:
         return [
             row["datasource"]
             for row in await self.execute_query(
-                query, {"graph_owner": DATA_FABRIC_GRAPH_OWNER}
+                query, {"owner": DATA_FABRIC_GRAPH_OWNER}
             )
         ]
 
     async def get_datasource(self, name: str) -> Optional[dict[str, Any]]:
         query = """
-        MATCH (ds:DataSource {name: $name, graph_owner: $graph_owner})
+        MATCH (ds:DataSource {name: $name, _owner: $owner})
         RETURN ds {
-            .datasource_id, .graph_owner, .workspace_id,
             .name, .engine, .display_name, .host, .port, .database, .user,
             created_at: toString(ds.created_at)
         } AS datasource
         """
         result = await self.execute_query(
-            query, {"name": name, "graph_owner": DATA_FABRIC_GRAPH_OWNER}
+            query, {"name": name, "owner": DATA_FABRIC_GRAPH_OWNER}
         )
         return result[0]["datasource"] if result else None
 
@@ -147,25 +138,20 @@ class DatasourceRegistry:
         or Architect, so metadata cleanup belongs to its owning service.
         """
         query = """
-        MATCH (ds:DataSource {name: $name, graph_owner: $graph_owner})
+        MATCH (ds:DataSource {name: $name, _owner: $owner})
         DETACH DELETE ds
         RETURN 1 AS deleted
         """
         result = await self.execute_query(
-            query, {"name": name, "graph_owner": DATA_FABRIC_GRAPH_OWNER}
+            query, {"name": name, "owner": DATA_FABRIC_GRAPH_OWNER}
         )
         return bool(result and result[0]["deleted"] == 1)
 
     async def ensure_constraints(self) -> None:
         """실패를 숨기지 않고 registry identity 제약을 보장한다."""
         constraints = (
-            # Old builds constrained every service's DataSource name globally.
-            # Replace that cross-owner coupling with an owner-prefixed key.
-            "DROP CONSTRAINT datasource_name IF EXISTS",
-            "CREATE CONSTRAINT data_fabric_datasource_registry_key IF NOT EXISTS "
-            "FOR (ds:DataSource) REQUIRE ds.registry_key IS UNIQUE",
-            "CREATE CONSTRAINT datasource_id IF NOT EXISTS "
-            "FOR (ds:DataSource) REQUIRE ds.datasource_id IS UNIQUE",
+            "CREATE CONSTRAINT data_fabric_datasource_identity IF NOT EXISTS "
+            "FOR (ds:DataSource) REQUIRE (ds._owner, ds.name) IS UNIQUE",
         )
         for query in constraints:
             await self.execute_query(query)

@@ -2,8 +2,6 @@ import asyncio
 import unittest
 
 from fastapi import HTTPException
-from starlette.requests import Request
-
 import api.datasources as endpoints
 from contracts.datasources import DataSourceCreate
 from api.datasources import TestConnectionRequest
@@ -55,11 +53,7 @@ class _RegistryFake:
         self.parameters = kwargs["parameters"]
         if self.fail_create:
             raise RuntimeError("registry unavailable")
-        return {"datasource_id": "ds-1", "graph_owner": "data-fabric", "workspace_id": kwargs["workspace_id"], "name": kwargs["name"], "engine": kwargs["engine"]}
-
-
-def _request() -> Request:
-    return Request({"type": "http", "method": "POST", "path": "/", "headers": [(b"x-workspace-id", b"ws-1")]})
+        return {"name": kwargs["name"], "engine": kwargs["engine"]}
 
 
 async def test_create_keeps_credentials_out_of_registry_boundary() -> None:
@@ -69,11 +63,10 @@ async def test_create_keeps_credentials_out_of_registry_boundary() -> None:
     try:
         result = await endpoints.create_datasource(
             DataSourceCreate(name="orders", engine="postgres", parameters={"host": "db", "user": "app", "password": "secret", "api_key": "token"}),
-            _request(),
         )
     finally:
         endpoints.mindsdb_gateway, endpoints.datasource_registry = originals
-    assert result["workspace_id"] == "ws-1"
+    assert result == {"name": "orders", "engine": "postgres"}
     assert registry.parameters == {"host": "db", "user": "app"}
     assert mindsdb.created[0][2]["password"] == "secret" and "api_key" in mindsdb.created[0][2]
 
@@ -84,7 +77,7 @@ async def test_create_compensates_mindsdb_when_registry_fails() -> None:
     endpoints.mindsdb_gateway, endpoints.datasource_registry = mindsdb, registry
     try:
         try:
-            await endpoints.create_datasource(DataSourceCreate(name="orders", engine="postgres", parameters={"password": "secret"}), _request())
+            await endpoints.create_datasource(DataSourceCreate(name="orders", engine="postgres", parameters={"password": "secret"}))
         except HTTPException as exc:
             assert exc.status_code == 500
         else:
@@ -102,7 +95,6 @@ async def test_create_rejects_registered_but_unreachable_target() -> None:
         with unittest.TestCase().assertRaises(HTTPException) as raised:
             await endpoints.create_datasource(
                 DataSourceCreate(name="orders", engine="postgres", parameters={"host": "invalid"}),
-                _request(),
             )
     finally:
         endpoints.mindsdb_gateway, endpoints.datasource_registry = originals
@@ -119,7 +111,6 @@ async def test_create_compensates_when_target_inspection_raises() -> None:
         with unittest.TestCase().assertRaises(HTTPException) as raised:
             await endpoints.create_datasource(
                 DataSourceCreate(name="orders", engine="postgres", parameters={"host": "slow"}),
-                _request(),
             )
     finally:
         endpoints.mindsdb_gateway, endpoints.datasource_registry = originals
@@ -140,7 +131,6 @@ async def test_create_repairs_orphan_mindsdb_connector() -> None:
                 engine="postgres",
                 parameters={"host": "db", "password": "secret"},
             ),
-            _request(),
         )
     finally:
         endpoints.mindsdb_gateway, endpoints.datasource_registry = originals

@@ -1,4 +1,3 @@
-"""Datasource registry graph scope."""
+"""Datasource registry ownership."""
 
 DATA_FABRIC_GRAPH_OWNER = "data-fabric"
-DEFAULT_WORKSPACE_ID = "default"
