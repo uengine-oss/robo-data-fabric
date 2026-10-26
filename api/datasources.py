@@ -48,21 +48,39 @@ async def _drop_mindsdb_connection(name: str, *, operation: str) -> bool:
 async def _create_or_replace_stale_connection(
     name: str, engine: str, parameters: dict[str, Any]
 ) -> bool:
-    """Create a connector, repairing an orphan left without a registry node."""
+    """Create a connector, repairing an orphan left without a registry node.
+
+    ⚠ **호출부가 registry 에 그 이름이 없음을 이미 확인한 뒤**에만 부른다
+    (`create_datasource` 의 첫 줄). 그러므로 MindsDB 쪽에 같은 이름이 있으면
+    그것은 **정의상 고아**다 — registry 에 주인이 없다.
+
+    예전에는 `inspect_database` 가 **성공할 때만** 고아로 보고 지웠다. 그런데
+    고아가 되는 가장 흔한 이유는 **그 연결이 가리키던 주소가 죽은 것**이고,
+    그때 inspect 는 `connection timeout expired` 로 실패한다. 즉 **복구가 정작
+    필요한 경우에 안 돌았다**(2026-10-26 실측 · ISS-61: 옛 중앙 주소
+    `192.168.219.100` 을 보던 고아 `test` 가 이름만 차지하고 있었다).
+
+    inspect 성공 여부는 **"살아 있나"** 이지 **"우리 것인가"** 가 아니다.
+    판단은 registry 로 한다.
+    """
     result = await mindsdb_gateway.create_database(name, engine, parameters)
     if result["type"] != "error":
         return True
 
+    # 이름이 겹친 것이 아니면 고칠 대상이 아니다 — 접속값이 틀렸거나 MindsDB 가
+    # 응답하지 않는 것이고, 그건 호출부가 사람에게 그대로 말해야 한다.
+    if result.get("status_code") != 409:
+        return False
+
     try:
         existing = await mindsdb_gateway.inspect_database(name)
+        reachable = bool(existing["success"])
     except Exception:
-        return False
-    if not existing["success"]:
-        return False
+        reachable = False
 
     logger.warning(
         "Replacing orphan MindsDB connector without registry ownership",
-        extra={"connector_name": name},
+        extra={"connector_name": name, "orphan_reachable": reachable},
     )
     if not await _drop_mindsdb_connection(name, operation="replace_orphan"):
         raise HTTPException(status_code=502, detail="기존 고아 연결 정리에 실패했습니다.")
@@ -126,7 +144,16 @@ async def create_datasource(datasource: DataSourceCreate) -> dict[str, Any]:
         mindsdb_parameters(datasource.parameters, settings.mindsdb_replace_localhost),
     )
     if not created:
-        raise HTTPException(status_code=400, detail="데이터베이스 연결 등록에 실패했습니다.")
+        # ⚠ **왜 실패했는지를 말한다.** 전에는 무엇이든 한 문장이었고, 그래서
+        #    이름이 겹쳤을 때도 쓰는 사람이 **접속값을 의심했다**(ISS-60).
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"'{datasource.name}' 이름으로 연결을 만들지 못했습니다. "
+                "같은 이름이 이미 쓰이고 있으면 다른 이름을 쓰시고, "
+                "그렇지 않으면 접속값을 확인해 주십시오."
+            ),
+        )
 
     try:
         inspection = await mindsdb_gateway.inspect_database(datasource.name)

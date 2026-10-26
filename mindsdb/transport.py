@@ -21,6 +21,7 @@ def _result(
     data: list[list[Any]] | None = None,
     error: str | None = None,
     execution_time: float = 0.0,
+    status_code: int | None = None,
 ) -> dict[str, Any]:
     rows = data or []
     return {
@@ -29,6 +30,7 @@ def _result(
         "data": rows,
         "row_count": len(rows),
         "error": error,
+        "status_code": status_code,
         "execution_time": execution_time,
     }
 
@@ -114,7 +116,15 @@ class MindsDBTransport:
                 "MindsDB connector creation rejected",
                 extra={"connector": connector_name, "status_code": response.status_code},
             )
-            return _result("error", error="MindsDB connector creation failed")
+            # ⚠ **상태코드를 버리지 않는다.** 409(이름 겹침)와 그 밖의 실패는
+            #    사람이 할 일이 전혀 다르다 — 앞은 "다른 이름을 쓰십시오",
+            #    뒤는 "접속값을 보십시오". 버리면 화면이 둘을 똑같이 말하고,
+            #    쓰는 사람은 멀쩡한 접속값을 의심하게 된다(2026-10-26 · ISS-60).
+            return _result(
+                "error",
+                error="MindsDB connector creation failed",
+                status_code=response.status_code,
+            )
         except httpx.TimeoutException:
             logger.warning(
                 "MindsDB connector creation timed out",
