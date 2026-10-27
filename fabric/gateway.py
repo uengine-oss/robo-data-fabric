@@ -217,6 +217,23 @@ class FabricGateway:
             for key, value in parameters.items()
             if not (isinstance(value, str) and not value.strip())
         }
+        # ⚠ **스키마를 안 적으면 표가 하나도 안 들어온다 — 조용히.**
+        #
+        # 엔진은 PostgreSQL 원천에서 `schema` 를 **가져올 범위**로 쓴다
+        # (`engine/src/fabric/mod.rs` 의 `default_remote_schema`). 그 값이 없으면
+        # `IMPORT FOREIGN SCHEMA` 를 **아예 건너뛴다** — 오류 없이 외부 서버와
+        # user mapping 만 생기고 표는 0개다. 화면에는 "테이블이 없습니다" 만 뜬다
+        # (2026-10-27 실측: `SHOW DATASOURCES` 가 `tables: 0`).
+        #
+        # ⚠ 화면 안내였던 "비워두면 모든 스키마 접근" 은 **엔진에 없는 기능**이다.
+        #   데이터소스 하나가 원천 스키마 하나를 가져온다. MindsDB 때의 안내가
+        #   그대로 남아 있었다.
+        #
+        # 비우는 쪽이 보통이므로 여기서 **`public` 으로 채운다**. 다른 스키마를
+        # 쓰려면 사람이 그 이름을 적으면 된다. MySQL 계열은 엔진이 `database` 를
+        # 범위로 쓰므로 손대지 않는다.
+        if eng in {"postgres", "postgresql"} and not shaped.get("schema"):
+            shaped["schema"] = "public"
         keys = sorted(shaped)
         assignments = ", ".join(f"{k}: ${k}" for k in keys)
         statement = (
