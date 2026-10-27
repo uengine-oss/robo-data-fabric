@@ -201,14 +201,30 @@ class FabricGateway:
         if ds in await self._datasource_names():
             return _result("error", error=f"datasource '{ds}' already exists", status_code=409)
 
-        keys = sorted(parameters)
+        # ⚠ **빈 문자열은 "없음" 이다 — 보내면 엔진이 빈 식별자를 만든다.**
+        #
+        # 화면의 Schema 칸은 "비워두면 모든 스키마 접근" 이라고 안내한다. 그런데
+        # 그 빈 값이 그대로 오면 엔진이 이렇게 거절한다(2026-10-27 실측):
+        #
+        #     ERROR: zero-length delimited identifier at or near ""
+        #
+        # 그래서 **스키마를 안 적는 보통의 길이 통째로 막혀 있었다.** 화면에는
+        # "접속값을 확인하라" 고 떴는데 접속값은 맞았다(test-connection 은 200).
+        #
+        # 빈 문자열만 턴다 — `0`·`False` 는 뜻이 있는 값이라 그대로 둔다.
+        shaped = {
+            key: value
+            for key, value in parameters.items()
+            if not (isinstance(value, str) and not value.strip())
+        }
+        keys = sorted(shaped)
         assignments = ", ".join(f"{k}: ${k}" for k in keys)
         statement = (
             f"CREATE DATASOURCE {ds} WITH ENGINE = '{eng}', "
             f"PARAMETERS = {{{assignments}}}"
         )
         # ⚠ 값은 **전부 파라미터로** 간다 — 비밀번호가 질의문에 남지 않는다.
-        result = await self.execute_query(statement, {k: parameters[k] for k in keys})
+        result = await self.execute_query(statement, {k: shaped[k] for k in keys})
         if result["type"] == "error":
             return _result("error", error=result["error"], status_code=502)
         return _result("ok")
