@@ -123,3 +123,35 @@ def _visible_sql(sql: str) -> str:
     if parenthesis_depth:
         raise ReadOnlyQueryError("unbalanced parentheses")
     return "".join(visible)
+
+
+# ── 사이퍼 읽기 전용 검사 ────────────────────────────────────────────────
+#
+# ⚠ **이것은 두 번째 자물쇠다.** 첫 자물쇠는 엔진이다 — 가상 노드는 읽기 전용이고
+#    (타입 거부 + 외부 테이블 트리거), 임의 SQL 은 Bolt 로 들어오지도 못한다.
+#    2026-10-27 에 여섯 방향으로 재서 전부 거절되는 것을 봤다. 그래도 여기서 한 번
+#    더 막는 이유는, **거절이 어디서 났는지 사람에게 말해 줄 수 있는 자리**가
+#    여기이기 때문이다. 엔진의 거절은 영어 한 줄로 온다.
+_CYPHER_WRITE = frozenset(
+    {
+        "create", "merge", "delete", "detach", "set", "remove", "drop",
+        "materialize", "foreach", "load", "call", "grant", "revoke",
+    }
+)
+
+
+def validate_read_only_cypher(query: str) -> str:
+    """읽기만 하는 사이퍼면 그대로 돌려주고, 아니면 거절한다."""
+    text = (query or "").strip()
+    if not text:
+        raise ReadOnlyQueryError("질의가 비어 있습니다")
+    if ";" in text.rstrip(";"):
+        raise ReadOnlyQueryError("한 번에 한 문장만 보낼 수 있습니다")
+    words = {w.lower() for w in _WORD.findall(_visible_sql(text))}
+    hit = sorted(words & _CYPHER_WRITE)
+    if hit:
+        raise ReadOnlyQueryError(
+            f"읽기 전용입니다 — '{hit[0].upper()}' 는 쓸 수 없습니다. "
+            "원천 시스템에서 바꾸십시오"
+        )
+    return text

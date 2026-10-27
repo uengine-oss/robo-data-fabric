@@ -57,11 +57,14 @@ class FabricSettings:
     neo4j_user: str = os.getenv("NEO4J_USER", "neo4j")
     neo4j_password: str = os.getenv("NEO4J_PASSWORD", "neo4j")
     neo4j_database: str = os.getenv("NEO4J_DATABASE", "neo4j")
-    mindsdb_url: str | None = os.getenv("MINDSDB_URL") or None
-    mindsdb_host: str = os.getenv("MINDSDB_HOST", "127.0.0.1")
-    mindsdb_port: int = _bounded_int("MINDSDB_API_PORT", 47334, 1, 65535)
-    mindsdb_replace_localhost: str = os.getenv(
-        "MINDSDB_REPLACE_LOCALHOST", "host.docker.internal"
+    # 원천 DB 접속값에서 `localhost` 를 무엇으로 바꿀지.
+    #
+    # ⚠ 사람이 적는 `localhost` 는 **자기 PC** 를 뜻한다. 그런데 원천에
+    #    실제로 붙는 쪽은 중앙 DB 컨테이너다 — 거기서 `localhost` 는 그
+    #    컨테이너 자신이다. 그래서 바꿔 준다. MindsDB 를 쓸 때도 같은
+    #    이유로 있던 값이고(그때는 mindsdb 컨테이너였다), 이름만 옮겼다.
+    datasource_replace_localhost: str = os.getenv(
+        "ROBO_DATASOURCE_REPLACE_LOCALHOST", "host.docker.internal"
     )
 
     def __post_init__(self) -> None:

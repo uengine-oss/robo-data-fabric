@@ -1,10 +1,18 @@
-"""Public read-only query and MindsDB status contracts."""
+"""읽기 전용 질의와 패브릭 상태 계약.
+
+⚠ 2026-10-27: `query` 는 이제 **사이퍼**다(SQL 이 아니다). 이 엔진은 임의 SQL 을
+   일부러 받지 않는다 — SQL 은 가상 노드 정의(`AS SELECT`) 안에만 둔다(ADR-029).
+"""
 from pydantic import BaseModel, Field
 from typing import Optional, List, Any
 
 
 class QueryRequest(BaseModel):
-    """대상 datasource에서 실행할 bounded read-only SQL."""
+    """경계 있는 읽기 전용 **사이퍼**.
+
+    `datasource` 는 "등록된 것인지" 를 보는 자리다. 질의 자체는 graph 에 대고
+    돌고, 그 graph 안에서 가상 노드가 원천 행을 대신한다.
+    """
     datasource: str = Field(
         ..., min_length=1, max_length=128, pattern=r"^[A-Za-z_][A-Za-z0-9_-]*$"
     )
@@ -15,7 +23,7 @@ class QueryRequest(BaseModel):
         json_schema_extra = {
             "example": {
                 "datasource": "shopmall",
-                "query": "SELECT * FROM public.orders",
+                "query": "MATCH (o:Order) RETURN o.id, o.total",
                 "max_rows": 100,
             }
         }
@@ -31,8 +39,8 @@ class QueryResponse(BaseModel):
     execution_time: Optional[float] = None
 
 
-class MindsDBStatus(BaseModel):
-    """MindsDB server status"""
+class FabricStatus(BaseModel):
+    """패브릭(그래프 엔진) 상태"""
     connected: bool
     version: Optional[str] = None
     error: Optional[str] = None

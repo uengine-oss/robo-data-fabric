@@ -1,4 +1,12 @@
-"""Data Fabric의 데이터소스 연결 registry와 실제 DB 접근 HTTP 경계."""
+"""Data Fabric 의 데이터소스 connector registry 와 실제 DB 접근 HTTP 경계.
+
+⚠ 2026-10-27 에 **MindsDB 에서 Ontological 의 virtual fabric 으로** 옮겼다.
+   게이트웨이의 메서드 이름이 같아서 이 파일의 흐름은 그대로다. 달라진 것 셋 —
+     · 비밀번호가 **파라미터로** 가고 FDW user mapping 에 저장된다
+       (superuser 만 읽는다). 우리 registry 는 여전히 비밀번호를 안 갖는다
+     · 삭제가 **가상 노드를 먼저 뗀다** (엔진이 순서를 강제한다)
+     · 컬럼·표본은 **가상 노드를 선언한 뒤** 보인다 (`api/tables.py`)
+"""
 from __future__ import annotations
 
 import logging
@@ -11,8 +19,8 @@ from contracts.datasources import (
 )
 from .graph_connection import apply_neo4j_override
 from credentials.allowlist import registry_parameters
-from credentials.network_rewrite import mindsdb_parameters
-from mindsdb.transport import mindsdb_gateway
+from credentials.network_rewrite import source_parameters
+from fabric.gateway import fabric_gateway
 from registry.datasources import datasource_registry
 from shared.config.settings import settings
 
@@ -26,19 +34,19 @@ router = APIRouter(
 )
 
 
-async def _drop_mindsdb_connection(name: str, *, operation: str) -> bool:
-    """부분 실패 시 MindsDB 연결을 정리하고 정리 실패를 관측 가능하게 남긴다."""
+async def _drop_fabric_connection(name: str, *, operation: str) -> bool:
+    """부분 실패 시 패브릭 데이터소스를 정리하고, 정리 실패를 남긴다."""
     try:
-        result = await mindsdb_gateway.drop_database(name)
+        result = await fabric_gateway.drop_database(name)
     except Exception:
         logger.exception(
-            "MindsDB connection cleanup raised",
+            "Fabric datasource cleanup raised",
             extra={"connector_name": name, "operation": operation},
         )
         return False
     if result["type"] == "error":
         logger.error(
-            "MindsDB connection cleanup failed",
+            "Fabric datasource cleanup failed",
             extra={"connector_name": name, "operation": operation},
         )
         return False
@@ -63,7 +71,7 @@ async def _create_or_replace_stale_connection(
     inspect 성공 여부는 **"살아 있나"** 이지 **"우리 것인가"** 가 아니다.
     판단은 registry 로 한다.
     """
-    result = await mindsdb_gateway.create_database(name, engine, parameters)
+    result = await fabric_gateway.create_database(name, engine, parameters)
     if result["type"] != "error":
         return True
 
@@ -73,18 +81,18 @@ async def _create_or_replace_stale_connection(
         return False
 
     try:
-        existing = await mindsdb_gateway.inspect_database(name)
+        existing = await fabric_gateway.inspect_database(name)
         reachable = bool(existing["success"])
     except Exception:
         reachable = False
 
     logger.warning(
-        "Replacing orphan MindsDB connector without registry ownership",
+        "Replacing orphan fabric datasource without registry ownership",
         extra={"connector_name": name, "orphan_reachable": reachable},
     )
-    if not await _drop_mindsdb_connection(name, operation="replace_orphan"):
+    if not await _drop_fabric_connection(name, operation="replace_orphan"):
         raise HTTPException(status_code=502, detail="기존 고아 연결 정리에 실패했습니다.")
-    retry = await mindsdb_gateway.create_database(name, engine, parameters)
+    retry = await fabric_gateway.create_database(name, engine, parameters)
     return retry["type"] != "error"
 
 
@@ -96,23 +104,23 @@ async def list_datasources() -> dict[str, Any]:
 
 @router.post("/test-connection")
 async def test_connection_params(request: TestConnectionRequest) -> dict[str, Any]:
-    """credential을 저장하지 않고 임시 MindsDB 연결로 실제 접속을 검증한다."""
+    """credential 을 저장하지 않고 임시 데이터소스로 실제 접속을 검증한다."""
     probe_name = f"robo_probe_{uuid4().hex}"
     created = False
     try:
-        result = await mindsdb_gateway.create_database(
+        result = await fabric_gateway.create_database(
             probe_name,
             request.engine,
-            mindsdb_parameters(
+            source_parameters(
                 request.model_dump(exclude={"engine"}, exclude_none=True),
-                settings.mindsdb_replace_localhost,
+                settings.datasource_replace_localhost,
             ),
         )
         if result["type"] == "error":
             return {"success": False, "message": "데이터베이스 연결에 실패했습니다."}
         created = True
         try:
-            inspection = await mindsdb_gateway.inspect_database(probe_name)
+            inspection = await fabric_gateway.inspect_database(probe_name)
         except Exception as exc:
             logger.warning(
                 "Datasource connection probe failed",
@@ -123,7 +131,7 @@ async def test_connection_params(request: TestConnectionRequest) -> dict[str, An
             return {"success": False, "message": "데이터베이스 연결에 실패했습니다."}
         return {"success": True, "message": "데이터베이스 연결에 성공했습니다."}
     finally:
-        if created and not await _drop_mindsdb_connection(
+        if created and not await _drop_fabric_connection(
             probe_name, operation="connection_probe"
         ):
             raise HTTPException(
@@ -134,14 +142,14 @@ async def test_connection_params(request: TestConnectionRequest) -> dict[str, An
 
 @router.post("", response_model=DataSourceResponse)
 async def create_datasource(datasource: DataSourceCreate) -> dict[str, Any]:
-    """MindsDB 연결과 Neo4j registry를 하나의 보상 가능한 생성 작업으로 등록한다."""
+    """패브릭 데이터소스와 graph registry 를 하나의 보상 가능한 작업으로 등록한다."""
     if await datasource_registry.get_datasource(datasource.name):
         raise HTTPException(status_code=409, detail=f"DataSource '{datasource.name}' already exists")
 
     created = await _create_or_replace_stale_connection(
         datasource.name,
         datasource.engine,
-        mindsdb_parameters(datasource.parameters, settings.mindsdb_replace_localhost),
+        source_parameters(datasource.parameters, settings.datasource_replace_localhost),
     )
     if not created:
         # ⚠ **왜 실패했는지를 말한다.** 전에는 무엇이든 한 문장이었고, 그래서
@@ -156,13 +164,13 @@ async def create_datasource(datasource: DataSourceCreate) -> dict[str, Any]:
         )
 
     try:
-        inspection = await mindsdb_gateway.inspect_database(datasource.name)
+        inspection = await fabric_gateway.inspect_database(datasource.name)
     except Exception as exc:
-        if not await _drop_mindsdb_connection(datasource.name, operation="target_inspection"):
+        if not await _drop_fabric_connection(datasource.name, operation="target_inspection"):
             raise HTTPException(status_code=502, detail="실패한 연결 정리에 실패했습니다.") from exc
         raise HTTPException(status_code=400, detail="대상 데이터베이스에 연결할 수 없습니다.") from exc
     if not inspection["success"]:
-        if not await _drop_mindsdb_connection(datasource.name, operation="target_inspection"):
+        if not await _drop_fabric_connection(datasource.name, operation="target_inspection"):
             raise HTTPException(status_code=502, detail="실패한 연결 정리에 실패했습니다.")
         raise HTTPException(status_code=400, detail="대상 데이터베이스에 연결할 수 없습니다.")
 
@@ -176,7 +184,7 @@ async def create_datasource(datasource: DataSourceCreate) -> dict[str, Any]:
         if not registry:
             raise RuntimeError("registry returned no datasource")
     except Exception as exc:
-        if not await _drop_mindsdb_connection(datasource.name, operation="registry_create"):
+        if not await _drop_fabric_connection(datasource.name, operation="registry_create"):
             raise HTTPException(status_code=500, detail="연결 등록과 보상 정리가 모두 실패했습니다.") from exc
         raise HTTPException(status_code=500, detail="연결 registry 저장에 실패했습니다.") from exc
 
@@ -192,17 +200,17 @@ async def check_health(name: str) -> dict[str, Any]:
             "status": "not_found",
             "message": "데이터소스를 찾을 수 없습니다.",
             "db_connected": False,
-            "mindsdb_connected": False,
+            "source_connected": False,
         }
 
-    result = await mindsdb_gateway.inspect_database(name)
+    result = await fabric_gateway.inspect_database(name)
     healthy = result["success"]
     return {
         "name": name,
         "status": "healthy" if healthy else "disconnected",
-        "message": "MindsDB를 통한 실제 DB 접근 정상" if healthy else "실제 DB 접근 실패",
+        "message": "원천 DB 접근 정상" if healthy else "실제 DB 접근 실패",
         "db_connected": healthy,
-        "mindsdb_connected": healthy,
+        "source_connected": healthy,
     }
 
 
@@ -210,7 +218,7 @@ async def check_health(name: str) -> dict[str, Any]:
 async def test_connection(name: str) -> dict[str, Any]:
     if not await datasource_registry.get_datasource(name):
         raise HTTPException(status_code=404, detail=f"DataSource '{name}' not found")
-    result = await mindsdb_gateway.inspect_database(name)
+    result = await fabric_gateway.inspect_database(name)
     return {
         "success": result["success"],
         "message": (
@@ -231,14 +239,19 @@ async def get_datasource(name: str) -> dict[str, Any]:
 
 @router.delete("/{name}")
 async def delete_datasource(name: str) -> dict[str, str]:
-    """기본 동작으로 MindsDB 연결과 registry를 함께 제거한다."""
+    """데이터소스와 registry 를 함께 제거한다.
+
+    ⚠ 게이트웨이가 **가상 노드를 먼저 뗀다** — 엔진이 그 순서를 강제한다
+      ("datasource … still backs virtual types; drop or materialize them first").
+      MindsDB 때는 `DROP DATABASE` 하나로 끝났으므로 여기가 바뀐 자리다.
+    """
     datasource = await datasource_registry.get_datasource(name)
     if not datasource:
         raise HTTPException(status_code=404, detail=f"DataSource '{name}' not found")
 
-    mindsdb_result = await mindsdb_gateway.drop_database(name)
-    if mindsdb_result["type"] == "error":
-        raise HTTPException(status_code=502, detail="MindsDB 연결 삭제에 실패했습니다. 다시 시도해 주세요.")
+    dropped = await fabric_gateway.drop_database(name)
+    if dropped["type"] == "error":
+        raise HTTPException(status_code=502, detail="데이터소스 삭제에 실패했습니다. 다시 시도해 주세요.")
     registry_deleted = await datasource_registry.delete_datasource(name)
     if not registry_deleted:
         raise HTTPException(status_code=502, detail="데이터소스 삭제가 부분 실패했습니다. 다시 시도해 주세요.")
