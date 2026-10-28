@@ -234,6 +234,8 @@ class FabricGateway:
         # 범위로 쓰므로 손대지 않는다.
         if eng in {"postgres", "postgresql"} and not shaped.get("schema"):
             shaped["schema"] = "public"
+        # MySQL 계열은 엔진이 **database** 를 범위로 쓴다 — schema 는 뜻이 없다.
+        # 빈 값이 와도 위에서 이미 털렸고, 사람이 적어 보냈으면 그대로 간다.
         keys = sorted(shaped)
         assignments = ", ".join(f"{k}: ${k}" for k in keys)
         statement = (
